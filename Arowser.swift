@@ -837,6 +837,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             if $0.window.isVisible != $1.window.isVisible { return $0.window.isVisible }
             return $0.window.title < $1.window.title
         }
+        if ordered.isEmpty {
+            // Disabled placeholder (Apple's Window ▸ No Windows pattern): an
+            // empty submenu renders as a blank drop and reads as broken —
+            // common state now that the app stays resident with zero windows.
+            let empty = NSMenuItem(title: L("No open windows"), action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+            return menu
+        }
         for slot in ordered {
             let mark = slot.window.isVisible ? "●" : "○"
             var label = "\(mark)  \(slot.window.title)"
@@ -940,7 +949,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         menu.addItem(windowsItem)
         let historyItem = NSMenuItem(title: L("History"), action: nil, keyEquivalent: "")
         let history = NSMenu(title: L("History"))
-        fillHistoryEntries(into: history, includeHeader: false)
+        fillHistoryEntries(into: history, includeHeader: true)
         historyItem.submenu = history
         menu.addItem(historyItem)
         menu.addItem(.separator())

@@ -13,6 +13,7 @@
 "⌘R Retry · ⌘W Close · ⌥+drag to move window" = "⌘R 重试 · ⌘W 关闭 · ⌥+拖动移动窗口";
 "Retry" = "重试";
 "No closed windows in the last %d hours" = "最近 %d 小时无关闭的窗口";
+"No open windows" = "无打开的窗口";
 "%d windows will close" = "%d 个窗口将关闭";
 " (including %d hidden windows)" = "（含 %d 个隐藏窗口）";
 "; local serve will stop (%d mounts, automatically restored on next serve)" = "；本地 serve 将停止（%d 个挂载，下次 serve 自动恢复）";
