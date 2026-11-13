@@ -1,6 +1,6 @@
 # arowser screenshot-based demo GIF
 
-Final: `demo.gif` — 800 × 800, 14.5 seconds, 12 fps, 1,714,146 bytes. Static overview: `poster.png`.
+Final: `demo.gif` — 800 × 800, 14.5 seconds, 8 fps, 2,831,195 bytes. Static overview: `poster.png`.
 
 ## Design
 
@@ -38,7 +38,7 @@ python3 /tmp/arowser-demo/compose.py
 FFMPEG=ffmpeg (any recent build; here: the binary bundled by imageio-ffmpeg)
 "$FFMPEG" -hide_banner -loglevel error -y \
   -framerate 12 -i /tmp/arowser-demo/frames/%04d.png \
-  -filter_complex 'split[a][b];[a]palettegen=max_colors=256[p];[b][p]paletteuse=dither=none:diff_mode=rectangle' \
+  -filter_complex 'fps=8,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=none:diff_mode=rectangle' \
   -loop 0 /tmp/arowser-demo/demo.gif
 ```
 
@@ -65,3 +65,11 @@ Requested by the user after viewing the initial version. The background is an en
 The first session variant scrolled behind the cards but was obscured once all result windows appeared. The corrected canvas is 800×800, preserving card sizes and leaving an unobstructed session strip below them (y=690–756). New transcript lines are anchored near the bottom of the session viewport. The session no longer fades with the foreground windows at the loop end.
 
 Validation reads the encoded GIF, crops the exposed session strip in all 174 frames, and confirms visible pixel changes in every one of the 173 adjacent frame pairs. Dimensions, duration and byte size are saved in `validation.json`. Actual screenshots, foreground cards and their positions remain unchanged.
+
+## Full-width session correction
+
+The user found that the right side of the session remained empty. The panel already filled its viewport; short transcript lines and a bottom-anchored initial offset were the cause. The corrected renderer wraps longer fictional session paragraphs using actual Maple Mono glyph widths (674px text width) and fills the complete viewport from frame one. The transcript source is `session-content.json`; no real session is used.
+
+Validation now separately examines the rightmost exposed text region (x=650–762, y=690–746) in the encoded GIF, as well as the full bottom strip. Both regions change in all 173 adjacent frame pairs and retain visible text throughout. The right side is also visually checked after notification dismissal. Window screenshots and animation timings are unchanged. `demo-fullwidth.gif` is a stable copy of this revision.
+
+Final delivery encoding: 116 frames at 8 fps (14.5 s), 128-color palette without dithering, 2,831,195 bytes. Source rendering remains 174 frames at 12 fps. Revalidation of the final optimized GIF confirms both bottom and right-bottom text regions change in all 115 adjacent frame pairs. Earlier 174/173-frame counts above refer to the unoptimized source version.
