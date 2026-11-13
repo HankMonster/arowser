@@ -143,7 +143,7 @@ Behavior changes are verified against the real app, not just compiled. Methods u
 - **Honest boundaries**: macOS menus swallow synthetic events, so menu-item clicks are verified by humans; the README records which items are machine-verified vs human-verified
 - show-info's render pipeline carries a unittest suite (`python3 -m unittest discover -s skills/show-info/tests`)
 - Localization key coverage and `.strings` parsing: `python3 -m unittest discover -s tests` (uses macOS `plutil`).
-- Localization was checked in the rebuilt app with `-AppleLanguages '(en)'` and `'(zh_CN)'`: native error-card text, find placeholder and no-results text were screenshot-verified; find-button tooltips and bar bounds were checked in the page. Bilingual menus and the ⌘Q dialog still require human verification. System-provided error descriptions remain unchanged.
+- Localization was checked in the rebuilt app with `-AppleLanguages '(en)'` and `'(zh_CN)'`: native error-card text, find placeholder and no-results text were screenshot-verified; find-button tooltips and bar bounds were checked in the page. Menus and the ⌘Q dialog were human-verified in both languages (2026-11-13: English via an English-first system launch, Simplified Chinese via forced `zh_CN`). System-provided WebKit error descriptions remain English in both languages.
 
 ## Localization
 
