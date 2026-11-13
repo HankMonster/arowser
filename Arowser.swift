@@ -4,6 +4,20 @@ import CryptoKit
 import Network
 import WebKit
 
+/// English literals are the fallback when no localization is available.
+private func L(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
+private func LF(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), arguments: args)
+}
+
+/// A JSON string literal keeps translations safe inside the page user script.
+private func jsString(_ value: String) -> String {
+    String(decoding: try! JSONEncoder().encode(value), as: UTF8.self)
+}
+
 /// One always-on-top window per window id.
 final class Slot {
     let id: String
@@ -416,6 +430,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private static let findBarScript = #"""
     (() => {
       if (window.__arowserFind) return;
+      const FIND_PLACEHOLDER = \#(jsString(L("Find…")));
+      const PREVIOUS_TITLE = \#(jsString(L("Previous (Shift+Enter)")));
+      const NEXT_TITLE = \#(jsString(L("Next (Enter)")));
+      const CLOSE_TITLE = \#(jsString(L("Close (Esc)")));
+      const NO_MATCH = \#(jsString(L("No results")));
       const MAX = 2000;
       const host = document.createElement('div');
       host.style.cssText = 'all:initial;position:fixed;top:32px;right:12px;z-index:2147483647;';
@@ -435,15 +454,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
           button:hover{background:#45475a}
         </style>
         <div class="bar">
-          <input type="text" placeholder="查找…" spellcheck="false">
+          <input type="text" placeholder="" spellcheck="false">
           <span class="count"></span>
-          <button data-act="prev" title="上一个 (Shift+Enter)">&#9650;</button>
-          <button data-act="next" title="下一个 (Enter)">&#9660;</button>
-          <button data-act="close" title="关闭 (Esc)">&#10005;</button>
+          <button data-act="prev" title="">&#9650;</button>
+          <button data-act="next" title="">&#9660;</button>
+          <button data-act="close" title="">&#10005;</button>
         </div>`;
       const bar = root.querySelector('.bar');
       const input = root.querySelector('input');
       const count = root.querySelector('.count');
+      input.placeholder = FIND_PLACEHOLDER;
+      root.querySelector('[data-act="prev"]').title = PREVIOUS_TITLE;
+      root.querySelector('[data-act="next"]').title = NEXT_TITLE;
+      root.querySelector('[data-act="close"]').title = CLOSE_TITLE;
 
       // ::highlight() styles must live in the page document (highlights paint
       // on page content); script-inserted <style> is not CSP-blocked.
@@ -518,7 +541,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
       function render() {
         bar.classList.toggle('nores', !!input.value && ranges.length === 0);
         if (!input.value) { count.textContent = ''; return; }
-        count.textContent = ranges.length === 0 ? '无结果'
+        count.textContent = ranges.length === 0 ? NO_MATCH
           : (idx + 1) + '/' + ranges.length + (capped ? '+' : '');
       }
 
@@ -912,16 +935,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     /// from the status bar behaves exactly like the hotkey pickers.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let windowsItem = NSMenuItem(title: "窗口", action: nil, keyEquivalent: "")
+        let windowsItem = NSMenuItem(title: L("Windows"), action: nil, keyEquivalent: "")
         windowsItem.submenu = windowListMenu(includeHideHint: false)
         menu.addItem(windowsItem)
-        let historyItem = NSMenuItem(title: "历史", action: nil, keyEquivalent: "")
-        let history = NSMenu(title: "历史")
+        let historyItem = NSMenuItem(title: L("History"), action: nil, keyEquivalent: "")
+        let history = NSMenu(title: L("History"))
         fillHistoryEntries(into: history, includeHeader: false)
         historyItem.submenu = history
         menu.addItem(historyItem)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "退出 arowser", action: #selector(statusQuit(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: L("Quit arowser"), action: #selector(statusQuit(_:)), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
     }
@@ -1097,7 +1120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if closeOpenPickers() { return }
         let menu = NSMenu(title: "History")
         let hideItem = NSMenuItem(
-            title: "关闭历史列表",
+            title: L("Close History"),
             action: #selector(pickerHideAction),
             keyEquivalent: ""
         )
@@ -1142,7 +1165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func fillHistoryEntries(into menu: NSMenu, includeHeader: Bool) {
         if includeHeader, historyEntries.isEmpty {
             let empty = NSMenuItem(
-                title: "最近 \(Int(configuredHistoryHours())) 小时无关闭的窗口",
+                title: LF("No closed windows in the last %d hours", Int(configuredHistoryHours())),
                 action: nil, keyEquivalent: ""
             )
             empty.isEnabled = false
@@ -1279,20 +1302,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "退出 arowser？"
+        alert.messageText = L("Quit arowser?")
         let hidden = slots.values.filter { !$0.window.isVisible }.count
-        var detail = "\(slots.count) 个窗口将关闭"
-        if hidden > 0 { detail += "（含 \(hidden) 个隐藏窗口）" }
+        var detail = LF("%d windows will close", slots.count)
+        if hidden > 0 { detail += LF(" (including %d hidden windows)", hidden) }
         let mounts = DirServer.shared.mountList.count
         if mounts > 0 {
-            detail += "；本地 serve 将停止（\(mounts) 个挂载，下次 serve 自动恢复）"
+            detail += LF("; local serve will stop (%d mounts, automatically restored on next serve)", mounts)
         }
-        if sessionRestoreEnabled() { detail += "。下次启动将恢复这些窗口" }
+        if sessionRestoreEnabled() { detail += L(". These windows will be restored on next launch") }
         alert.informativeText = detail
         // 取消 is the default (Return/Esc): a reflexive Enter after an
         // accidental ⌘Q must not kill the windows.
-        alert.addButton(withTitle: "取消")
-        alert.addButton(withTitle: "退出")
+        alert.addButton(withTitle: L("Cancel"))
+        alert.addButton(withTitle: L("Quit"))
         let response = alert.runModal()
         if response == .alertSecondButtonReturn {
             if sessionRestoreEnabled() { writeSessionSnapshot() }
@@ -1490,10 +1513,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func relativeTime(_ date: Date) -> String {
         let seconds = max(0, Date().timeIntervalSince(date))
-        if seconds < 60 { return "刚刚" }
-        if seconds < 3600 { return "\(Int(seconds / 60)) 分钟前" }
-        if seconds < 86400 { return "\(Int(seconds / 3600)) 小时前" }
-        return "\(Int(seconds / 86400)) 天前"
+        if seconds < 60 { return L("Just now") }
+        if seconds < 3600 { return LF("%d min ago", Int(seconds / 60)) }
+        if seconds < 86400 { return LF("%d hours ago", Int(seconds / 3600)) }
+        return LF("%d days ago", Int(seconds / 86400))
     }
 
     // MARK: - Menu
@@ -2672,7 +2695,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             srgbRed: 0.118, green: 0.118, blue: 0.180, alpha: 1
         ).cgColor  // #1e1e2e, same dark card as the find bar / notify cards
 
-        let title = NSTextField(labelWithString: "⚠️ 加载失败")
+        let title = NSTextField(labelWithString: L("⚠️ Load failed"))
         title.font = .systemFont(ofSize: 15, weight: .semibold)
         title.textColor = NSColor(srgbRed: 0.8, green: 0.855, blue: 0.957, alpha: 1)  // #cdd6f4
 
@@ -2691,7 +2714,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         detail.tag = 2
         detail.preferredMaxLayoutWidth = 360
 
-        let hint = NSTextField(labelWithString: "⌘R 重试 · ⌘W 关闭 · ⌥+拖动移动窗口")
+        let hint = NSTextField(labelWithString: L("⌘R Retry · ⌘W Close · ⌥+drag to move window"))
         hint.font = .systemFont(ofSize: 10, weight: .regular)
         hint.textColor = NSColor(srgbRed: 0.42, green: 0.44, blue: 0.53, alpha: 1)  // #6c7086
 
@@ -2700,7 +2723,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         stack.alignment = .centerX
         stack.spacing = 10
 
-        let retry = NSButton(title: "重试", target: self, action: #selector(retryFailedLoad(_:)))
+        let retry = NSButton(title: L("Retry"), target: self, action: #selector(retryFailedLoad(_:)))
         retry.bezelStyle = .rounded
         retry.controlSize = .regular
         stack.addView(retry, in: .bottom)

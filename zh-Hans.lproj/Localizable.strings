@@ -1,0 +1,26 @@
+/* English literal keys; preserve the original Simplified Chinese UI text. */
+
+"Windows" = "窗口";
+"History" = "历史";
+"Quit arowser" = "退出 arowser";
+"Close History" = "关闭历史列表";
+"Quit arowser?" = "退出 arowser？";
+". These windows will be restored on next launch" = "。下次启动将恢复这些窗口";
+"Cancel" = "取消";
+"Quit" = "退出";
+"Just now" = "刚刚";
+"⚠️ Load failed" = "⚠️ 加载失败";
+"⌘R Retry · ⌘W Close · ⌥+drag to move window" = "⌘R 重试 · ⌘W 关闭 · ⌥+拖动移动窗口";
+"Retry" = "重试";
+"No closed windows in the last %d hours" = "最近 %d 小时无关闭的窗口";
+"%d windows will close" = "%d 个窗口将关闭";
+" (including %d hidden windows)" = "（含 %d 个隐藏窗口）";
+"; local serve will stop (%d mounts, automatically restored on next serve)" = "；本地 serve 将停止（%d 个挂载，下次 serve 自动恢复）";
+"%d min ago" = "%d 分钟前";
+"%d hours ago" = "%d 小时前";
+"%d days ago" = "%d 天前";
+"Find…" = "查找…";
+"Previous (Shift+Enter)" = "上一个 (Shift+Enter)";
+"Next (Enter)" = "下一个 (Enter)";
+"Close (Esc)" = "关闭 (Esc)";
+"No results" = "无结果";

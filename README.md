@@ -142,12 +142,17 @@ Behavior changes are verified against the real app, not just compiled. Methods u
 - **CLI round-trips**: open → list --json → show/hide/close with exit-code checks; owner mismatch verified to exit 3
 - **Honest boundaries**: macOS menus swallow synthetic events, so menu-item clicks are verified by humans; the README records which items are machine-verified vs human-verified
 - show-info's render pipeline carries a unittest suite (`python3 -m unittest discover -s skills/show-info/tests`)
+- Localization key coverage and `.strings` parsing: `python3 -m unittest discover -s tests` (uses macOS `plutil`).
+- Localization was checked in the rebuilt app with `-AppleLanguages '(en)'` and `'(zh_CN)'`: native error-card text, find placeholder and no-results text were screenshot-verified; find-button tooltips and bar bounds were checked in the page. Bilingual menus and the ⌘Q dialog still require human verification. System-provided error descriptions remain unchanged.
+
+## Localization
+
+The UI follows the system language: English is the default and Simplified Chinese is included; to add a language, contribute a `<language>.lproj/Localizable.strings` table with English-literal keys and add it to `build.sh`'s resource copy step.
 
 ## Limitations
 
 - Rendering engine is system WebKit (WKWebView), not Chromium; Chrome-only sites may misbehave
 - macOS 12+ only; notarized releases and Homebrew packaging are not yet available (build from source)
-- **UI strings are currently Chinese-only in v1** (menus, dialogs, find bar, error cards); i18n is tracked as a good first issue
 - No `unmount` for serve mounts and no `clear` for cookie jars yet — delete `serve.json` / the WebKit data directory by hand
 - Served directories are readable by any local process (localhost, no auth)
 - The `arowser://` scheme is callable by any local process; owner checks prevent mistakes, not abuse

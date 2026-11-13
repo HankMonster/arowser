@@ -30,6 +30,7 @@ cp assets/icon/arowser.icns "$APP/Contents/Resources/arowser.icns"
 # Menu bar status item glyph (template image, black + alpha).
 cp assets/icon/statusbar-template.png "$APP/Contents/Resources/statusbar-template.png"
 cp assets/icon/statusbar-template-legacy.png "$APP/Contents/Resources/statusbar-template-legacy.png"
+cp -R zh-Hans.lproj "$APP/Contents/Resources/zh-Hans.lproj"
 
 codesign --force --sign - "$APP" >/dev/null
 "$LSREGISTER" -f "$APP" || true
