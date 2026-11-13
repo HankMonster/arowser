@@ -1,6 +1,6 @@
 # arowser screenshot-based demo GIF
 
-Final: `demo.gif` — 800 × 720, 14.5 seconds, 12 fps, 714,916 bytes (698 KiB). Static overview: `poster.png`.
+Final: `demo.gif` — 800 × 800, 14.5 seconds, 12 fps, 1,714,146 bytes. Static overview: `poster.png`.
 
 ## Design
 
@@ -31,14 +31,14 @@ Captures are Retina RGBA: 880×1120, 584×550, 584×520. Window-id capture exclu
 
 ## Compose and encode
 
-`compose.py` uses Pillow to place the real screenshots on an 800×720 background, with shadows, captions and short ease-in transitions. It writes 174 PNG frames and `poster.png`. Timing: notice 0.2s, report 2.5s, summary 6.5s, notice dismiss 11.5s, fade/reset 14–14.5s.
+`compose.py` uses Pillow to place the real screenshots over a fictional scrolling agent session on an 800×800 background, with shadows, captions and short ease-in transitions. It writes 174 PNG frames and `poster.png`. Timing: notice 0.2s, report 2.5s, summary 6.5s, notice dismiss 11.5s, fade/reset 14–14.5s.
 
 ```sh
 python3 /tmp/arowser-demo/compose.py
 FFMPEG=ffmpeg (any recent build; here: the binary bundled by imageio-ffmpeg)
 "$FFMPEG" -hide_banner -loglevel error -y \
   -framerate 12 -i /tmp/arowser-demo/frames/%04d.png \
-  -filter_complex 'split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle' \
+  -filter_complex 'split[a][b];[a]palettegen=max_colors=256[p];[b][p]paletteuse=dither=none:diff_mode=rectangle' \
   -loop 0 /tmp/arowser-demo/demo.gif
 ```
 
@@ -55,3 +55,13 @@ FFMPEG=ffmpeg (any recent build; here: the binary bundled by imageio-ffmpeg)
 - Live desktop recording introduced unrelated Terminal UI and timing issues; that approach was abandoned after the user chose screenshot composition. Old takes were removed.
 - Screenshot by window id avoids leaking background through desktop-region capture.
 - Footer visibility must be checked on the screenshot; HTML source alone did not reveal clipping.
+
+## Scrolling session revision
+
+Requested by the user after viewing the initial version. The background is an entirely authored English session, labeled DEMO SESSION. No real conversation or terminal capture is used. Text scrolls slowly behind the unchanged real window screenshots; foreground content remains dominant. `demo.gif` and `demo-session.gif` are the current version. `demo-clean.gif`, `poster-clean.png`, and `compose-clean.py` preserve the plain-background variant for comparison. A 256-color palette without dithering keeps flat card backgrounds clean while controlling the animation size.
+
+## Continuous visibility correction
+
+The first session variant scrolled behind the cards but was obscured once all result windows appeared. The corrected canvas is 800×800, preserving card sizes and leaving an unobstructed session strip below them (y=690–756). New transcript lines are anchored near the bottom of the session viewport. The session no longer fades with the foreground windows at the loop end.
+
+Validation reads the encoded GIF, crops the exposed session strip in all 174 frames, and confirms visible pixel changes in every one of the 173 adjacent frame pairs. Dimensions, duration and byte size are saved in `validation.json`. Actual screenshots, foreground cards and their positions remain unchanged.
