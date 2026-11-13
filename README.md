@@ -17,7 +17,20 @@ Most agent-browser tooling is about the agent *using* a browser (scraping, autom
 
 ## Install
 
-Requires macOS 12+ and Swift (Xcode Command Line Tools). No other dependencies.
+Requires macOS 12+. Two ways:
+
+### Homebrew (tap)
+
+```bash
+brew tap HankMonster/arowser
+brew install --cask HankMonster/arowser/arowser
+```
+
+Installs the app to `/Applications` and links `arowser` / `arowser-watch` into Homebrew's bin.
+
+### From source
+
+Requires Swift (Xcode Command Line Tools). No other dependencies.
 
 ```bash
 git clone https://github.com/HankMonster/arowser.git
@@ -30,6 +43,8 @@ cd arowser
 - App: `~/Applications/arowser.app` (bundle id `com.hank.arowser`)
 - CLI: `~/.local/bin/arowser` (make sure `~/.local/bin` is on your PATH)
 - Watcher: `~/.local/bin/arowser-watch`
+
+The CLI finds the app at `$ARROWSER_APP`, then `~/Applications/arowser.app`, then `/Applications/arowser.app` — so Homebrew- and source-installed apps are both supported.
 
 Rebuilding: quit the running instance first (`arowser quit --all`), or the old instance keeps holding the `arowser://` URL scheme.
 

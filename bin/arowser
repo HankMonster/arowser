@@ -2,6 +2,7 @@
 set -euo pipefail
 
 APP="${AROWSER_APP:-$HOME/Applications/arowser.app}"
+if [[ ! -d "$APP" && -d "/Applications/arowser.app" ]]; then APP="/Applications/arowser.app"; fi
 STATE="${AROWSER_STATE:-$HOME/Library/Application Support/arowser/state.json}"
 ACK_DIR="${AROWSER_ACK_DIR:-$HOME/Library/Application Support/arowser/acks}"
 SCHEME="arowser"
