@@ -1,6 +1,6 @@
 # arowser
 
-<!-- TODO: demo GIF — agent pops a pinned dashboard window with one command, multi-window, hotkey picker -->
+![arowser demo: a notify-user card pops in, a show-info benchmark report and a diff summary open beside it, then the notification fades while the results stay](assets/demo.gif)
 
 **Agent-programmable web windows for macOS.** One command puts a URL in a small borderless window you can place anywhere — and the CLI is designed to be driven by coding agents: windows are addressed by stable ids, multiple agents can work simultaneously without stepping on each other, and login states survive restarts.
 
