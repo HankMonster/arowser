@@ -25,14 +25,15 @@ The notification window is **one shared window across agents**, not one per sess
 
 ```bash
 command -v arowser >/dev/null || { echo "arowser missing — install/build it first (see the arowser skill)"; exit 1; }
+SKILL_DIR="<skill-dir>"   # where you installed skills/notify-user (absolute path)
 card="/tmp/arowser-notify/card-$(date +%H%M%S).html"
 mkdir -p /tmp/arowser-notify
 meta="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)") · ${AROWSER_OWNER:-cc-${CLAUDE_CODE_SESSION_ID:0:8}} · $(date '+%m-%d %H:%M')"
-python3 - "$card" "$meta" <<'PY'
-import sys, pathlib
-tpl = pathlib.Path(__file__).parent / "assets" / "card.html"
+python3 - "$card" "$meta" "$SKILL_DIR/assets/card.html" <<'PY'
+import sys
+tpl = open(sys.argv[3]).read()
 open(sys.argv[1], "w").write(
-    tpl.read_text().replace("{{TITLE}}", "✅ Title: one-line conclusion")
+    tpl.replace("{{TITLE}}", "✅ Title: one-line conclusion")
        .replace("{{ITEMS}}", "<li><span class=done>✔</span> Done item A</li>\n<li><span class=done>✔</span> Done item B")
        .replace("{{ASK}}", "When help is needed, name the concrete action: which key to try, what to click; write 'none' if nothing is needed")
        .replace("{{META}}", sys.argv[2]))
@@ -40,7 +41,7 @@ PY
 arowser open "$card" --id notify-user --owner notify --title Notify --float --w 380 --h 320
 ```
 
-(Adapt the template-fill snippet to your agent runtime — the contract is the four placeholders and the fixed `open` flags.)
+(The template path is passed explicitly — `python3 -` runs with `__file__ = "<stdin>"`, so a `__file__`-relative lookup would resolve against the caller's CWD. Adapt the fill snippet to your agent runtime; the contract is the four placeholders and the fixed `open` flags.)
 
 ## Card rules
 
