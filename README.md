@@ -4,7 +4,7 @@
 
 **Agent-programmable web windows for macOS.** One command puts a URL in a small borderless window you can place anywhere — and the CLI is designed to be driven by coding agents: windows are addressed by stable ids, multiple agents can work simultaneously without stepping on each other, and login states survive restarts.
 
-The name: **a**rowser = **b**rowser with the b swapped for **a** (for agent). It does not touch your other browsers' settings.
+The name: **a**rowser is **b**rowser with the b swapped for **a** — *a* for *agent*: a browser whose primary user is your coding agent, opening windows for you to look at. It grew out of the author's own daily agent workflow — agents popping up dashboards, reports and notification cards during real work sessions — and it never touches your other browsers' settings or data.
 
 ## Why
 
