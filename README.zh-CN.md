@@ -9,7 +9,7 @@ arowser = **b**rowser 的 b 换成 **a**（a 代表 agent）；不改动系统�
 需要 macOS 12+ 与 Swift（Xcode Command Line Tools），无其他依赖：
 
 ```bash
-git clone <this repository>
+git clone https://github.com/HankMonster/arowser.git
 cd arowser
 ./build.sh
 ```

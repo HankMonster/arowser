@@ -20,7 +20,7 @@ Most agent-browser tooling is about the agent *using* a browser (scraping, autom
 Requires macOS 12+ and Swift (Xcode Command Line Tools). No other dependencies.
 
 ```bash
-git clone <this repository>
+git clone https://github.com/HankMonster/arowser.git
 cd arowser
 ./build.sh
 ```
