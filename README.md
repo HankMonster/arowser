@@ -26,6 +26,8 @@ brew tap HankMonster/arowser
 brew install --cask HankMonster/arowser/arowser
 ```
 
+On newer Homebrew versions that refuse third-party taps, run `brew trust hankmonster/arowser` between the two commands.
+
 Installs the app to `/Applications` and links `arowser` / `arowser-watch` into Homebrew's bin.
 
 ### From source
