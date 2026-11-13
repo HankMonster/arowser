@@ -1,0 +1,22 @@
+body{margin:0;font-family:'Maple Mono NF CN',-apple-system,'PingFang SC',sans-serif;
+     background:#1e1e2e;color:#cdd6f4;padding:18px 22px;font-size:13px;line-height:1.85}
+h1{font-size:15px;margin:0 0 12px;color:#89b4fa}
+.page-title{position:sticky;top:0;z-index:10;background:#1e1e2e;
+            margin:-18px -22px 10px;padding:28px 22px 10px;
+            border-bottom:1px solid #45475a}
+h2,h3,h4{color:#89b4fa;margin:14px 0 8px}
+p{margin:6px 0}
+a{color:#89dceb}
+code{background:#313244;padding:1px 5px;border-radius:4px;font-size:12px}
+pre{background:#313244;padding:10px 12px;border-radius:6px;overflow:auto}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;margin:10px 0;font-size:12.5px}
+th,td{border:1px solid #45475a;padding:4px 10px;text-align:left}
+th{background:#313244;color:#a6adc8}
+blockquote{margin:8px 0;padding:2px 12px;border-left:3px solid #45475a;color:#a6adc8}
+hr{border:none;border-top:1px solid #45475a;margin:14px 0}
+details{margin:8px 0}
+summary{cursor:pointer;color:#a6adc8}
+.echart{margin:10px 0;height:320px}
+.meta{margin-top:14px;padding-top:8px;border-top:1px solid #45475a;font-size:11px;color:#7f849c}
+img{max-width:100%}

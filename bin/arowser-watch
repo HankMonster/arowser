@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""arowser-watch — open a local HTML file in arowser and auto-reload on changes.
+
+Usage:
+  arowser-watch <file.html|dir> [options] [arowser open options...]
+
+Own options:
+  --interval SEC   poll interval (default 0.5)
+  --settle SEC     wait for writes to settle before reloading (default 0.25)
+  --file-only      watch only the HTML file itself
+  --deep           watch the whole directory tree (default: HTML's own directory)
+  --close-on-exit  close the window when the watcher stops (default: keep it)
+
+Anything else is forwarded to `arowser open` (--title, --w/--h, --x/--y,
+--center, --id to reuse a window, --owner, ...). Reloads are sent with
+`arowser reload <id>`; when the window is closed the watcher exits.
+
+Examples:
+  arowser-watch ./report.html --title Report
+  arowser-watch /tmp/dashboard --w 800 --h 600 --center
+  arowser-watch ./report.html --deep
+"""
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+
+SKIP_DIRS = {".git", "node_modules", "__pycache__"}
+SKIP_FILES = {".DS_Store"}
+STATE_FILE = os.path.expanduser("~/Library/Application Support/arowser/state.json")
+
+
+def window_alive(win_id):
+    """Cheap liveness check: the app keeps closed windows out of state.json."""
+    try:
+        with open(STATE_FILE) as fh:
+            return win_id in json.load(fh).get("slots", {})
+    except (OSError, ValueError):
+        return True  # unreadable state: assume alive; a failed reload will catch it
+
+
+def die(msg, code=1):
+    print(f"arowser-watch: {msg}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def resolve_target(target):
+    path = os.path.abspath(os.path.expanduser(target))
+    if os.path.isdir(path):
+        index = os.path.join(path, "index.html")
+        if not os.path.isfile(index):
+            die(f"directory has no index.html: {target}", 2)
+        path = index
+    if not os.path.isfile(path):
+        die(f"file not found: {target}", 2)
+    return path
+
+
+def list_watched(html_path, deep, file_only):
+    """Return the sorted list of files to fingerprint (recomputed every poll)."""
+    if file_only:
+        return [html_path]
+    root = os.path.dirname(html_path) or "."
+    if deep:
+        out = []
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = sorted(
+                d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")
+            )
+            for name in sorted(filenames):
+                if name.startswith(".") or name in SKIP_FILES:
+                    continue
+                out.append(os.path.join(dirpath, name))
+        return out
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return [html_path]
+    files = []
+    for name in names:
+        if name.startswith(".") or name in SKIP_FILES:
+            continue
+        full = os.path.join(root, name)
+        if os.path.isfile(full):
+            files.append(full)
+    return files or [html_path]
+
+
+def fingerprint(paths):
+    """(path, mtime_ns, size) per file; None stat → file vanished mid-save."""
+    entries = []
+    for path in paths:
+        try:
+            st = os.stat(path)
+            entries.append((path, st.st_mtime_ns, st.st_size))
+        except OSError:
+            entries.append((path, None, None))
+    return tuple(entries)
+
+
+def stable(collect, settle, tries=6):
+    """Re-fingerprint until it stops changing, so we reload the final state."""
+    prev = collect()
+    for _ in range(tries):
+        time.sleep(settle)
+        cur = collect()
+        if cur == prev:
+            break
+        prev = cur
+    return prev
+
+
+def changed_names(old, new):
+    old_map = {p: (m, s) for p, m, s in old}
+    new_map = {p: (m, s) for p, m, s in new}
+    hits = [p for p in new_map if new_map[p] != old_map.get(p)]
+    hits += [p for p in old_map if p not in new_map]
+    return hits
+
+
+def arowser(*args):
+    return subprocess.run(["arowser", *args], capture_output=True, text=True)
+
+
+def extract_owner(forwarded):
+    for i, arg in enumerate(forwarded):
+        if arg == "--owner" and i + 1 < len(forwarded):
+            return forwarded[i + 1]
+        if arg.startswith("--owner="):
+            return arg.split("=", 1)[1]
+    return None
+
+
+def main():
+    try:
+        sys.stdout.reconfigure(line_buffering=True)  # logs must flush when piped
+    except AttributeError:
+        pass
+    ap = argparse.ArgumentParser(
+        prog="arowser-watch",
+        add_help=True,
+        allow_abbrev=False,  # arowser's --h/--w must forward, not match --help
+        description="Open a local HTML file in arowser and auto-reload on changes.",
+    )
+    ap.add_argument("target", help="HTML file, or a directory containing index.html")
+    ap.add_argument("--interval", type=float, default=0.5, help="poll interval in seconds (default 0.5)")
+    ap.add_argument("--settle", type=float, default=0.25, help="settle wait before reload (default 0.25)")
+    ap.add_argument("--file-only", action="store_true", help="watch only the HTML file itself")
+    ap.add_argument("--deep", action="store_true", help="watch the whole directory tree")
+    ap.add_argument("--close-on-exit", action="store_true", help="close the window when the watcher stops")
+    opts, forwarded = ap.parse_known_args()
+
+    if not shutil.which("arowser"):
+        die("arowser not on PATH; run tools/arowser/build.sh first", 2)
+    html_path = resolve_target(opts.target)
+
+    opened = arowser("open", html_path, *forwarded)
+    if opened.returncode != 0:
+        die(f"arowser open failed: {(opened.stderr or '').strip()}", opened.returncode)
+    win_id = opened.stdout.strip().splitlines()[0].strip()
+    owner = extract_owner(forwarded)
+
+    collect = lambda: fingerprint(list_watched(html_path, opts.deep, opts.file_only))
+    base_dir = os.path.dirname(html_path) or "."
+    last = collect()
+    scope = "file" if opts.file_only else ("tree" if opts.deep else "directory")
+    print(f"window {win_id} · watching {len(last)} file(s), {scope} of {base_dir}")
+    print(f"poll {opts.interval}s · Ctrl-C to stop (window stays)")
+
+    reloads = 0
+    try:
+        while True:
+            time.sleep(opts.interval)
+            if not window_alive(win_id):
+                print(f"{time.strftime('%H:%M:%S')} window {win_id} closed; stopping")
+                return
+            cur = collect()
+            if cur == last:
+                continue
+            prev = last
+            last = stable(collect, opts.settle)
+            names = ", ".join(
+                os.path.relpath(p, base_dir) for p in changed_names(prev, last)
+            ) or "(list changed)"
+            reload_cmd = arowser("reload", win_id, *(["--owner", owner] if owner else []))
+            if reload_cmd.returncode != 0:
+                print(f"{time.strftime('%H:%M:%S')} window gone "
+                      f"({(reload_cmd.stderr or '').strip()}); stopping")
+                return
+            reloads += 1
+            print(f"{time.strftime('%H:%M:%S')} reload #{reloads} ({names})")
+    except KeyboardInterrupt:
+        print(f"\nstopped after {reloads} reload(s)")
+        if opts.close_on_exit:
+            arowser("close", win_id, *(["--owner", owner] if owner else []))
+
+
+if __name__ == "__main__":
+    main()

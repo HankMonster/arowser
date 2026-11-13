@@ -1,0 +1,424 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP="${AROWSER_APP:-$HOME/Applications/arowser.app}"
+STATE="${AROWSER_STATE:-$HOME/Library/Application Support/arowser/state.json}"
+ACK_DIR="${AROWSER_ACK_DIR:-$HOME/Library/Application Support/arowser/acks}"
+SCHEME="arowser"
+
+usage() {
+  cat <<'EOF'
+arowser — agent-controlled always-on-top web windows
+
+Usage:
+  arowser open <url> [--id ID] [--owner NAME] [--title T]
+                     [--x N] [--y N] [--w N] [--h N] [--center]
+                     [--private | --profile NAME]
+                     [--no-fit | --fit] [--mobile | --no-mobile] [--float | --no-float] [--force]
+  arowser show <id> [url] [same options as open]
+  arowser hide <id>   [--owner NAME] [--force]
+  arowser close <id>  [--owner NAME] [--force]
+  arowser reload <id> [--owner NAME] [--force]
+  arowser serve <dir> [--id NAME]          # mount dir, prints its URL
+  arowser open <dir> --serve [open options]  # mount + open in one step
+  arowser list [--owner NAME] [--json]
+  arowser quit --all
+  arowser restore                       # reopen last session / dead records
+
+Each window has its own id; different ids never affect each other. `open`
+without --id prints a fresh unique id — store it and use it for later
+show/hide/close calls.
+
+Ownership: windows are tagged with an owner (--owner, $AROWSER_OWNER, or
+$CLAUDE_CODE_SESSION_ID). Commands from a different owner are rejected
+unless --force. Set AROWSER_OWNER explicitly for agents whose session id
+is not in the environment (e.g. Codex).
+
+Isolation: windows share cookies by default. Use --private for an ephemeral
+cookie jar per window, or --profile NAME for a persistent per-profile jar
+(e.g. one profile per agent account).
+
+Examples:
+  id=$(arowser open https://status.example.com --title Status)
+  arowser show "$id" https://status.example.com/tasks
+  arowser show "$id"                 # 取消隐藏/置前，不重载
+  arowser close "$id"
+
+  arowser open https://grafana.example.com/d/abc --title Grafana --w 800 --h 560
+  arowser open https://www.baidu.com --title Baidu --mobile --w 460 --h 620
+  arowser open https://status.example.com --title Status --w 460 --h 620 --center
+  arowser open https://admin.example.com --profile admin-a
+  arowser list --json
+
+By default pages are scaled down to fit the window width (--fit); use
+--no-fit to keep 100% and scroll horizontally. --mobile switches the user
+agent to an iPhone, which makes mobile-first sites render a readable layout
+in narrow windows.
+
+--x/--y are the window's top-left corner in screen coordinates (origin at
+the primary screen's top-left, same as screenshots and Accessibility).
+Without them a new window is placed at the top-right corner of the main
+screen; --w/--h set the window size in points. --center centers the window
+in the main screen's visible area and takes precedence over --x/--y.
+EOF
+}
+
+require_app() {
+  if [[ ! -d "$APP" ]]; then
+    echo "arowser.app not installed at $APP" >&2
+    echo "run: $(cd "$(dirname "$0")/.." && pwd)/build.sh" >&2
+    exit 1
+  fi
+}
+
+b64url() {
+  printf '%s' "$1" | base64 | tr -d '\n' | tr '+/' '-_' | tr -d '='
+}
+
+q() {
+  python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+}
+
+owner_default() {
+  if [[ -n "${AROWSER_OWNER:-}" ]]; then
+    printf '%s' "$AROWSER_OWNER"
+  elif [[ -n "${CLAUDE_CODE_SESSION_ID:-}" ]]; then
+    printf 'cc-%s' "$CLAUDE_CODE_SESSION_ID"
+  else
+    printf 'anonymous'
+  fi
+}
+
+wait_ack() {  # req [field to print instead of id]
+  python3 - "$ACK_DIR/$1.json" "${2:-id}" <<'PY'
+import json
+import os
+import sys
+import time
+
+path = sys.argv[1]
+field = sys.argv[2]
+deadline = time.time() + 6.0
+while time.time() < deadline:
+    if os.path.exists(path):
+        data = None
+        for _ in range(50):
+            try:
+                with open(path) as fh:
+                    data = json.load(fh)
+                break
+            except Exception:
+                time.sleep(0.02)
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        if data is None:
+            print("cannot read arowser ack", file=sys.stderr)
+            raise SystemExit(4)
+        if data.get("ok"):
+            out = data.get(field) or data.get("id") or "ok"
+            print(out)
+            raise SystemExit(0)
+        print(data.get("error") or "command failed", file=sys.stderr)
+        raise SystemExit(3)
+    time.sleep(0.05)
+print("no response from arowser (launch it once with: open -a arowser)", file=sys.stderr)
+raise SystemExit(4)
+PY
+}
+
+send_action() {  # action, extra-query (already encoded, may be empty) [, ack field]
+  local action="$1"
+  local extra="${2:-}"
+  local field="${3:-id}"
+  local req query
+  req="$(uuidgen | tr 'A-Z' 'a-z')"
+  query="req=$(q "$req")"
+  if [[ -n "$extra" ]]; then
+    query+="&$extra"
+  fi
+  require_app
+  if ! open -g "$SCHEME://$action?$query"; then
+    echo "failed to open $SCHEME:// URL (is the app registered?)" >&2
+    exit 4
+  fi
+  wait_ack "$req" "$field"
+}
+
+# Mounts a local directory over the app's built-in static server; prints the
+# http://127.0.0.1:<port>/<id>/ URL on stdout (errors on stderr).
+do_serve() {  # dir, [requested id]
+  local dir="$1"
+  local sid="${2:-}"
+  dir="$(cd "$dir" 2>/dev/null && pwd)" || { echo "not a directory: $1" >&2; return 2; }
+  local extra="dir=$(q "$dir")"
+  [[ -n "$sid" ]] && extra+="&id=$(q "$sid")"
+  send_action "serve" "$extra" "url"
+}
+
+normalize_url() {
+  local url="$1" path
+  url="${url/#\~/$HOME}"
+
+  # Anything with a scheme is already a URL (http/https/file/...).
+  if [[ "$url" == *"://"* ]]; then
+    printf '%s' "$url"
+    return 0
+  fi
+
+  if [[ -e "$url" ]]; then
+    path="$(cd "$(dirname "$url")" && pwd)/$(basename "$url")"
+    if [[ -d "$path" ]]; then
+      [[ -f "$path/index.html" ]] || { echo "directory has no index.html: $url" >&2; return 2; }
+      path="$path/index.html"
+    fi
+  elif [[ "$url" == /* || "$url" == ./* || "$url" == ../* ]]; then
+    path="$(cd "$(dirname "$url")" 2>/dev/null && pwd)/$(basename "$url")"
+    [[ -e "$path" ]] || { echo "file not found: $url" >&2; return 2; }
+  else
+    printf 'https://%s' "$url"
+    return 0
+  fi
+
+  printf 'file://%s' "$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$path")"
+}
+
+# Parses common window options into the globals below.
+parse_window_options() {
+  owner="$(owner_default)"
+  title=""
+  private=""
+  profile=""
+  force=""
+  geometry=""
+  fit=""
+  mobile=""
+  float=""
+  center=""
+  id="${id:-}"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id|--slot) id="$2"; shift 2 ;;
+      --owner) owner="$2"; shift 2 ;;
+      --title) title="$2"; shift 2 ;;
+      --private) private="1"; shift ;;
+      --profile) profile="$2"; shift 2 ;;
+      --force) force="1"; shift ;;
+      --fit) fit="1"; shift ;;
+      --no-fit) fit="0"; shift ;;
+      --mobile) mobile="1"; shift ;;
+      --no-mobile) mobile="0"; shift ;;
+      --float) float="1"; shift ;;
+      --no-float) float="0"; shift ;;
+      --center) center="1"; shift ;;
+      --help|-h) usage; exit 0 ;;
+      --x|--y|--w|--h)
+        geometry+="&${1#--}=$(q "$2")"
+        shift 2
+        ;;
+      *)
+        echo "unknown option: $1" >&2
+        exit 2
+        ;;
+    esac
+  done
+}
+
+window_query() {  # id, url, plus options already parsed
+  local id="$1" url="${2:-}"
+  local out
+  out="id=$(q "$id")&owner=$(q "$owner")"
+  if [[ -n "$url" ]]; then out+="&url_b64=$(b64url "$url")"; fi
+  if [[ -n "$title" ]]; then out+="&title=$(q "$title")"; fi
+  if [[ -n "$private" ]]; then out+="&private=1"; fi
+  if [[ -n "$profile" ]]; then out+="&profile=$(q "$profile")"; fi
+  if [[ -n "$force" ]]; then out+="&force=1"; fi
+  if [[ -n "$fit" ]]; then out+="&fit=$fit"; fi
+  if [[ -n "$mobile" ]]; then out+="&mobile=$mobile"; fi
+  if [[ -n "$center" ]]; then out+="&center=$center"; fi
+  if [[ -n "$float" ]]; then out+="&float=$float"; fi
+  out+="$geometry"
+  printf '%s' "$out"
+}
+
+cmd="${1:-}"
+[[ -n "$cmd" ]] || { usage; exit 2; }
+# `arowser --help` / `arowser -h` / `arowser <sub> --help` → usage, exit 0
+# (before, `open --help` fell through to normalize_url and opened a junk
+# https://--help/ window).
+if [[ "$cmd" == "--help" || "$cmd" == "-h" ]]; then
+  usage
+  exit 0
+fi
+shift
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  usage
+  exit 0
+fi
+
+case "$cmd" in
+  open)
+    [[ $# -ge 1 ]] || { usage; exit 2; }
+    target="$1"
+    shift
+    serve=""
+    args=()
+    for a in "$@"; do
+      if [[ "$a" == "--serve" ]]; then serve=1; else args+=("$a"); fi
+    done
+    if [[ -n "$serve" ]]; then
+      [[ "$target" != *"://"* ]] || { echo "--serve expects a local directory" >&2; exit 2; }
+      url="$(do_serve "$target")" || exit 2
+    else
+      url="$(normalize_url "$target")" || exit 2
+    fi
+    id=""
+    parse_window_options "${args[@]+"${args[@]}"}"
+    if [[ -z "$id" ]]; then
+      id="w-$(uuidgen | tr 'A-Z' 'a-z' | cut -c1-8)"
+    fi
+    send_action "open" "$(window_query "$id" "$url")"
+    ;;
+
+  show)
+    [[ $# -ge 1 ]] || { usage; exit 2; }
+    id="$1"
+    shift
+    url=""
+    if [[ $# -gt 0 && "$1" != --* ]]; then
+      url="$(normalize_url "$1")" || exit 2
+      shift
+    fi
+    parse_window_options "$@"
+    send_action "show" "$(window_query "$id" "$url")"
+    ;;
+
+  serve)
+    [[ $# -ge 1 ]] || { usage; exit 2; }
+    dir="$1"
+    shift
+    sid=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --id) sid="$2"; shift 2 ;;
+        *) echo "unknown option: $1" >&2; exit 2 ;;
+      esac
+    done
+    do_serve "$dir" "$sid"
+    ;;
+
+  hide|close|reload)
+    [[ $# -ge 1 ]] || { usage; exit 2; }
+    id="$1"
+    shift
+    owner="$(owner_default)"
+    force=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --owner) owner="$2"; shift 2 ;;
+        --force) force="1"; shift ;;
+        *) echo "unknown option: $1" >&2; exit 2 ;;
+      esac
+    done
+    extra="id=$(q "$id")&owner=$(q "$owner")"
+    if [[ -n "$force" ]]; then extra+="&force=1"; fi
+    send_action "$cmd" "$extra"
+    ;;
+
+  list)
+    filter_owner=""
+    as_json=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --owner) filter_owner="$2"; shift 2 ;;
+        --json) as_json="1"; shift ;;
+        *) echo "unknown option: $1" >&2; exit 2 ;;
+      esac
+    done
+    if ! pgrep -f "$APP/Contents/MacOS/arowser" >/dev/null 2>&1; then
+      running=""
+    else
+      running="1"
+    fi
+    python3 - "$STATE" "$filter_owner" "$as_json" "$running" <<'PY'
+import json
+import os
+import sys
+
+path, filter_owner, as_json, running = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+if not os.path.exists(path):
+    if as_json:
+        print("[]")
+    else:
+        print("no windows")
+    raise SystemExit(0)
+try:
+    with open(path) as fh:
+        data = json.load(fh)
+except Exception as exc:
+    print(f"cannot read state: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+
+slots = data.get("slots", {})
+if filter_owner:
+    slots = {k: v for k, v in slots.items() if v.get("owner") == filter_owner}
+
+if as_json:
+    print(json.dumps(list(slots.values()), ensure_ascii=False, indent=2, sort_keys=True))
+    raise SystemExit(0)
+
+if not slots:
+    print("no windows")
+    raise SystemExit(0)
+
+# When the app is down the state file is last-known, NOT live: windows died
+# with the app (crash/kill can leave records behind). Say so on stdout —
+# piped consumers never saw the old stderr-only banner and trusted dead ids.
+if not running:
+    print(f"(app not running; {len(slots)} stale record(s) from last run — windows are gone, show <id> needs a url)")
+
+print("\t".join(["id", "owner", "profile", "state", "frame", "page", "url"]))
+for wid, info in sorted(slots.items()):
+    state = ("visible" if info.get("visible") else "hidden")
+    if not running:
+        state += "?"
+    err = info.get("error") or ""
+    page = info.get("pageTitle", "")
+    if err:
+        page = "⚠ " + err[:60]  # last navigation failed; details via list --json
+    row = [
+        wid,
+        info.get("owner", ""),
+        info.get("profile", "default"),
+        state,
+        info.get("frame", ""),
+        page,
+        info.get("url", ""),
+    ]
+    print("\t".join(str(x) for x in row))
+PY
+    ;;
+
+  quit)
+    if [[ "${1:-}" != "--all" ]]; then
+      echo "quit closes every window; pass --all" >&2
+      exit 2
+    fi
+    send_action "quit" "all=1" >/dev/null
+    ;;
+
+  restore)
+    # Reopens the last session snapshot (⌘Q quit) or crash leftovers.
+    send_action "restore" ""
+    ;;
+
+  -h|--help|help)
+    usage
+    ;;
+
+  *)
+    usage
+    exit 2
+    ;;
+esac

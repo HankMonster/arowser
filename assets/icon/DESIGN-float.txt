@@ -1,0 +1,6 @@
+青绿深底上两层玻璃窗错位，亮色前窗表达始终置顶。
+
+重建管线（2026-11-13，Codex 产出）：SVG → AppKit NSImage 渲染（ImageMagick 会丢渐变）→
+iconset → icns。坑：iconutil 对有效 iconset 可能报 Invalid Iconset（原因未明），
+icns 可用标准 PNG chunk 容器直接合成；脚本原件曾在 /tmp/arowser-icon/（会话易失）。
+前窗多一条短拖动横线，呼应应用图标玻璃前窗。
