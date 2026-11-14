@@ -177,3 +177,7 @@ The UI follows the system language: English is the default and Simplified Chines
 ## License
 
 [MIT](LICENSE)
+
+---
+
+If arowser earns a place in your daily workflow, a star on the repository helps other agents — and their humans — find it.

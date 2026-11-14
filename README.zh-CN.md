@@ -41,3 +41,7 @@ arowser close "$id"
 ## 更多
 
 完整命令参考、功能细节（会话恢复、窗口历史、热键、watch 热刷新）、测试方法与边界，见 [English README](README.md)。
+
+---
+
+如果 arowser 融入了你的日常工作流，欢迎点个 star，帮其他 agent（和它们的人类）找到它。
