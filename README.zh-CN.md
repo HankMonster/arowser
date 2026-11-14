@@ -44,4 +44,4 @@ arowser close "$id"
 
 ---
 
-如果 arowser 融入了你的日常工作流，欢迎点个 star，帮其他 agent（和它们的人类）找到它。
+⭐ 如果 arowser 融入了你的日常工作流，欢迎**点个 star**，帮其他 agent（和它们的人类）找到它。
